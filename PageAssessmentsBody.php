@@ -1,5 +1,20 @@
 <?php
 /**
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * PageAssessments extension body
  *
  * @file
@@ -11,43 +26,48 @@ class PageAssessmentsBody {
 	/**
 	 * Driver function
 	 */
-	public static function execute ( &$parser, $project = '', $class = '', $importance = '' ) {
-		$newRecord = false;
-		// Title class object for the Main page of this Talk page
-		$pageObj = $parser->getTitle()->getSubjectPage();
-		$pageTitle = $pageObj->getText();
-		$exists = PageAssessmentsBody::checkIfExists( $pageTitle, $project, $class, $importance );
-		switch ( $exists ) {
-			case 'nochange':
-				return;
-			case 'change':
-				break;
-			default:
-				$newRecord = true;
-				break;
+	public static function execute ( $titleObj, $assessmentData ) {
+		$pageTitle = $titleObj->getText();
+		$pageNamespace = $titleObj->getNamespace();
+		$pageId = $titleObj->getArticleID();
+		$revisionId = $titleObj->getLatestRevID();
+		$userId = Revision::newFromId( $revisionId )->getUser();
+		// Compile a list of projects to find out which ones to be deleted afterwards
+		$projects = array();
+		foreach ( $assessmentData as $parserData ) {
+			$projects[] = $parserData[0];
 		}
+		$projectsInDb = PageAssessmentsBody::getAllProjects( $pageTitle );
+		$toInsert = array_diff( $projects, $projectsInDb );
+		$toDelete = array_diff( $projectsInDb, $projects );
+		$toUpdate = array_intersect( $projects, $projectsInDb );
 
-		$pageNamespace = $pageObj->getNamespace();
-		$pageId = $pageObj->getArticleID();
-		$revisionId = $pageObj->getLatestRevID();
-
-		// Compile the array to be inserted to the DB
-		$values = array(
-			'pa_page_id' => $pageId,
-			'pa_page_name' => $pageTitle,
-			'pa_page_namespace' => $pageNamespace,
-			'pa_project' => $project,
-			'pa_class' => $class,
-			'pa_importance' => $importance,
-			'pa_page_revision' => $revisionId
-		);
-		if ( $newRecord ) {
-			PageAssessmentsBody::insertRecord( $values );
-		} else {
-			PageAssessmentsBody::updateRecord( $values );
+		foreach ( $assessmentData as $parserData ) {
+			$project = $parserData[0];
+			$class = $parserData[1];
+			$importance = $parserData[2];
+			$values = array(
+				'pa_page_id' => $pageId,
+				'pa_page_name' => $pageTitle,
+				'pa_page_namespace' => $pageNamespace,
+				'pa_project' => $project,
+				'pa_class' => $class,
+				'pa_importance' => $importance,
+				'pa_page_revision' => $revisionId
+			);
+			if ( in_array( $project, $toInsert ) ) {
+				PageAssessmentsBody::insertRecord( $values );
+				$values['pa_user_id'] = $userId;
+				PageAssessmentsBody::insertLogRecord( $values );
+			} elseif ( in_array( $project, $toUpdate ) ) {
+				PageAssessmentsBody::updateRecord( $values );
+				$values['pa_user_id'] = $userId;
+				PageAssessmentsBody::insertLogRecord( $values );
+			}
 		}
-		$values['pa_user_id'] = $parser->getRevisionUser();
-		PageAssessmentsBody::insertLogRecord( $values );
+		foreach ( $toDelete as $project ) {
+			PageAssessmentsBody::deleteRecord( $pageTitle, $project );
+		}
 		return;
 	}
 
@@ -81,6 +101,42 @@ class PageAssessmentsBody {
 
 
 	/**
+	 * Get all records for give page
+	 * @param string $title Page title
+	 * @param string $project Project
+	 * @return array $results All projects associated with given page title
+	 */
+	public static function getAllProjects ( $title ) {
+		$dbw = wfGetDB( DB_SLAVE );
+		$res = $dbw->select( 'page_assessments', 'pa_project', 'pa_page_name = "' . $title . '"' );
+		$results = array();
+		if ( $res ) {
+			foreach ( $res as $row ) {
+				$results[] = $row->pa_project;
+			}
+		}
+		return $results;
+	}
+
+
+	/**
+	 * Delete a record from DB
+	 * @param string $title Page title
+	 * @param string $project Project
+	 * @return bool True/False on query success/fail
+	 */
+	public static function deleteRecord ( $title, $project ) {
+		$dbw = wfGetDB( DB_MASTER );
+		$conds = array(
+			'pa_page_name' => $title,
+			'pa_project' => $project
+		);
+		$dbw->delete( 'page_assessments', $conds, __METHOD__ );
+		return true;
+	}
+
+
+	/**
 	 * Insert to the logging table
 	 * @param array $values Values to be entered to the DB
 	 * @return bool True/False on query success/fail
@@ -88,7 +144,7 @@ class PageAssessmentsBody {
 	public static function insertLogRecord ( $values ) {
 		$logValues = array(
 			'pa_page_id' => $values['pa_page_id'],
-			'pa_user_id' => $values['pa_user'],
+			'pa_user_id' => $values['pa_user_id'],
 			'pa_page_revision' => $values['pa_page_revision'],
 			'pa_project' => $values['pa_project'],
 			'pa_class' => $values['pa_class'],
@@ -102,30 +158,20 @@ class PageAssessmentsBody {
 
 
 	/**
-	 * Check if the record already exists and is changed
-	 * @param string $pageTitle Title of the page
-	 * @param string $project Name of the Wikiproject associated
-	 * @param string $class Class attribute of the review
-	 * @param string $importance Importance attribute of the review
-	 * @return string nochange|change|noexist No changes/Changes to existing record/New record
+	 * Function called on parser init
+	 * @param Parser $parser Parser object
+	 * @param string $project Wikiproject name
+	 * @param string $class Class of article
+	 * @param string $importance Importance of article
 	 */
-	public static function checkIfExists ( $pageTitle, $project, $class, $importance ) {
-		$dbw = wfGetDB( DB_SLAVE ); // Read only query
-		$res = $dbw->select(
-			'page_assessments',
-			'*',
-			'pa_page_name = "' . $pageTitle . '" AND pa_project = "' . $project . '"'
-		);
-		if ( $res ) {
-			foreach ( $res as $row ) {
-				if ( $row->pa_class == $class && $row->pa_importance == $importance ) {
-					return 'nochange'; // Record is same as new
-				} elseif ( $row->pa_class != $class || $row->pa_importance != $importance ) {
-					return 'change';   // Record has changed
-				}
-			}
+	public static function cacheAssessment ( &$parser, $project = '', $class = '', $importance = '' ) {
+		$parserData = $parser->getOutput()->getExtensionData( 'ext-pageassessment-assessmentdata' );
+		$values = array( $project, $class, $importance );
+		if ( $parserData == null ) {
+			$parserData = array();
 		}
-		return 'noexist'; // New record
+		$parserData[] = $values;
+		$parser->getOutput()->setExtensionData( 'ext-pageassessment-assessmentdata', $parserData );
 	}
 
 }

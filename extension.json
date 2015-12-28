@@ -10,7 +10,6 @@
 	"type": "parserhook",
 	"AutoloadClasses": {
 		"PageAssessmentsHooks": "PageAssessments.hooks.php",
-		"PageAssessments": "PageAssessments.php",
 		"PageAssessmentsBody": "PageAssessmentsBody.php"
 	},
 	"ExtensionMessagesFiles": {
@@ -22,6 +21,9 @@
 		],
 		"LoadExtensionSchemaUpdates": [
 			"PageAssessmentsHooks::onLoadExtensionSchemaUpdates"
+		],
+		"OutputPageParserOutput": [
+			"PageAssessmentsHooks::onOutputPageParserOutput"
 		]
 	},
 	"MessagesDirs": {

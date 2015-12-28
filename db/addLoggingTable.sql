@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS /*_*/page_assessments_log (
 
 CREATE INDEX /*i*/pa_project_log ON /*_*/ page_assessments_log (pa_project);
 CREATE INDEX /*i*/pa_timestamp ON /*_*/ page_assessments_log (pa_timestamp);
-CREATE UNIQUE INDEX /*i*/pa_page_project_log ON /*_*/ page_assessments_log (pa_page_id, pa_project);
+CREATE INDEX /*i*/pa_page_project_log ON /*_*/ page_assessments_log (pa_page_id, pa_project);
