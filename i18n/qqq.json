@@ -4,5 +4,7 @@
 			"Niharika Kohli"
 		]
 	},
-	"page-assessments-desc": "{{desc|name=PageAssessments|url=https://www.mediawiki.org/wiki/Extension:PageAssessments}}"
+	"page-assessments-desc": "{{desc|name=PageAssessments|url=https://www.mediawiki.org/wiki/Extension:PageAssessments}}",
+	"apihelp-query+pageassessments-description": "{{doc-apihelp-description|query|pageassessment}}",
+	"apihelp-query+pageassessments-example-1": "{{doc-apihelp-example|query+pageassessment}}"
 }
