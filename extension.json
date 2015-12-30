@@ -9,7 +9,7 @@
 	"descriptionmsg": "page-assessments-desc",
 	"license-name": "GPL-2.0+",
 	"type": "parserhook",
-	"APIListModules": {
+	"APIPropModules": {
 		"pageassessments": "ApiQueryPageAssessments"
 	},
 	"AutoloadClasses": {

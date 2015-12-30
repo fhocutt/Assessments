@@ -1,8 +1,8 @@
 <?php
 class ApiQueryPageAssessments extends ApiQueryBase{
 
-	public function __construct( $query, $moduleName ) {
-		parent::__construct( $query, $moduleName );
+	public function __construct( ApiQuery $query, $moduleName ) {
+		parent::__construct( $query, $moduleName, 'pa' );
 	}
 
 	public function execute() {
@@ -10,17 +10,31 @@ class ApiQueryPageAssessments extends ApiQueryBase{
 	}
 
 	public function run() {
-		return '';
+		if ( $this->getPageSet()->getGoodTitleCount() == 0 ) {
+			return;
+		}
+
+		$db = $this->getDB();
+		$params = $this->extractRequestParams();
+		$alltitles = $this->getPageSet()->getGoodAndMissingTitles();
+
+		$this->addTables( 'page_assessments' );
+		$this->addWhereFld( 'pa_page_name', $alltitles );
+		$this->addFields( array( 'pageid' => 'pa_page_id', 'page' => 'pa_page_name', 'projects' => 'pa_project' ) );
+		$res = $this->select( __METHOD__ );
+
+		$result = $this->getResult();
+		foreach ( $res as $row ) {
+			$result->addValue( array( 'query', 'pages', $row->pageid, $row->projects ) );
+		}
 	}
 
 	public function getAllowedParams() {
 		return array(
-			'option' => array(
-				'project',
-				'pageinfo',
+			'continue' => array(
+				ApiBase::PARAM_TYPE => 'string',
+			//	ApiBase::PARAM_REQUIRED => true,
 			),
-			ApiBase::PARAM_REQUIRED => true,
-			ApiBase::PARAM_HELP_MSG_PER_VALUE => array(),
 		);
 	}
 
